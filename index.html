@@ -224,6 +224,21 @@ body.ro .ro-banner{display:block;}
   </div>
 </div>
 
+<!-- MODAL: senha para sair do modo leitura -->
+<div class="mo" id="mo-senha" style="display:none;">
+  <div class="mo-box">
+    <div class="mo-title">🔒 Acesso Restrito</div>
+    <div class="mo-sub">Digite a senha de administrador para desativar o modo leitura.</div>
+    <input class="mo-inp" id="inp-senha" type="password" placeholder="••••"
+           onkeydown="if(event.key==='Enter')confirmarSenha()" autocomplete="off" maxlength="20">
+    <div class="mo-err" id="senha-err"></div>
+    <div class="mo-btns">
+      <button class="btn bgh" onclick="fecharModal('mo-senha')" style="flex:1;justify-content:center;">Cancelar</button>
+      <button class="btn bgd" onclick="confirmarSenha()" style="flex:1;justify-content:center;">Confirmar</button>
+    </div>
+  </div>
+</div>
+
 <!-- DRIVE BAR -->
 <div class="drive-bar">
   <div class="drive-status">
@@ -1182,26 +1197,48 @@ function driveRestoreHint(){
 }
 
 // ── MODO LEITURA ──
+const RO_SENHA = '1234';
+let modoGestor = false; // true = veio pelo link ?gestor=1, não pode sair sem senha
+
 function abrirModalGestor(){ document.getElementById('mo-gestor').style.display='flex'; }
 function fecharModal(id){ document.getElementById(id).style.display='none'; }
 
-function ativarLeitura(){
+function ativarLeitura(viaLink=false){
+  modoGestor = viaLink;
   document.body.classList.add('ro');
-  document.getElementById('btn-sair-ro').style.display='flex';
-  document.querySelector('.btn-lock').style.display='none';
+  document.getElementById('btn-sair-ro').style.display = viaLink ? 'none' : 'flex';
+  const btnLock = document.querySelector('.btn-lock');
+  if(btnLock) btnLock.style.display='none';
   fecharModal('mo-gestor');
-  toast('Modo leitura ativado!');
+  if(!viaLink) toast('Modo leitura ativado!');
 }
 
 function sairModoLeitura(){
-  document.body.classList.remove('ro');
-  document.getElementById('btn-sair-ro').style.display='none';
-  document.querySelector('.btn-lock').style.display='flex';
-  toast('Modo leitura desativado.');
+  // Abre modal de senha
+  document.getElementById('mo-senha').style.display='flex';
+  document.getElementById('inp-senha').value='';
+  document.getElementById('senha-err').textContent='';
+  setTimeout(()=>document.getElementById('inp-senha').focus(),100);
+}
+
+function confirmarSenha(){
+  const v = document.getElementById('inp-senha').value;
+  if(v === RO_SENHA){
+    document.body.classList.remove('ro');
+    document.getElementById('btn-sair-ro').style.display='none';
+    const btnLock=document.querySelector('.btn-lock');
+    if(btnLock)btnLock.style.display='flex';
+    fecharModal('mo-senha');
+    modoGestor=false;
+    toast('Modo leitura desativado.');
+  } else {
+    document.getElementById('senha-err').textContent='Senha incorreta. Tente novamente.';
+    document.getElementById('inp-senha').value='';
+    document.getElementById('inp-senha').focus();
+  }
 }
 
 function copiarLinkLeitura(){
-  // Gera link com ?gestor=1 que abre automaticamente em modo leitura
   const url=window.location.href.split('?')[0]+'?gestor=1';
   navigator.clipboard.writeText(url).then(()=>{
     toast('Link copiado! Envie para seu gestor.');
@@ -1209,13 +1246,12 @@ function copiarLinkLeitura(){
   });
 }
 
-// Detecta se abriu com ?gestor=1 e ativa leitura automaticamente
+// Detecta ?gestor=1 e ativa leitura sem botão de saída
 (function detectGestorMode(){
   const p=new URLSearchParams(window.location.search);
   if(p.get('gestor')==='1'){
-    // aguarda DOM carregar
-    document.addEventListener('DOMContentLoaded',()=>{ setTimeout(ativarLeitura, 300); });
-    if(document.readyState!=='loading') setTimeout(ativarLeitura, 300);
+    if(document.readyState!=='loading') setTimeout(()=>ativarLeitura(true), 300);
+    else document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>ativarLeitura(true),300));
   }
 })();
 
