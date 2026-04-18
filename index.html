@@ -169,6 +169,22 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px;}
+/* MODO LEITURA */
+.ro-banner{display:none;background:linear-gradient(90deg,#0f4c5c,#1a3a5c);border-bottom:2px solid var(--gd);padding:8px 22px;text-align:center;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--gd);}
+body.ro input:not([readonly]),body.ro textarea,body.ro select{pointer-events:none!important;opacity:.55;background:var(--s2)!important;cursor:default!important;}
+body.ro .addash,body.ro .rmbtn{display:none!important;}
+body.ro .btn-lock{display:none!important;}
+body.ro #btn-drive-login,body.ro #btn-drive-sync,body.ro #btn-drive-logout,body.ro .prog{display:none!important;}
+body.ro .ro-banner{display:block;}
+/* MODAL */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:600;display:flex;align-items:center;justify-content:center;}
+.mo-box{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:30px 26px;width:300px;max-width:92vw;}
+.mo-title{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:900;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;color:var(--gd);}
+.mo-sub{font-size:11px;color:var(--mu);margin-bottom:18px;line-height:1.5;}
+.mo-inp{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:4px;color:var(--tx);font-family:'JetBrains Mono',monospace;font-size:15px;padding:9px 11px;outline:none;margin-bottom:5px;letter-spacing:4px;text-align:center;}
+.mo-inp:focus{border-color:var(--gd);}
+.mo-err{color:var(--rd);font-size:11px;min-height:15px;margin-bottom:11px;}
+.mo-btns{display:flex;gap:8px;}
 #toast{position:fixed;bottom:18px;right:18px;background:var(--sf);border:1px solid var(--gr);color:var(--gr);padding:9px 16px;border-radius:5px;font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:1px;transform:translateY(60px);opacity:0;transition:all .3s;z-index:999;}
 #toast.show{transform:translateY(0);opacity:1;}
 @media(max-width:900px){.kg4,.kg5,.fg4,.fg5,.fg6{grid-template-columns:1fr 1fr;}.fg3{grid-template-columns:1fr 1fr;}.cl2,.mtop,.mgrid,.pygrid{grid-template-columns:1fr;}}
@@ -178,7 +194,34 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
 
 <div class="topbar">
   <div><div class="logo">PAINEL <span>OPERACIONAL</span></div><div style="font-size:10px;color:var(--mu);letter-spacing:1px;margin-top:1px;">MINERAÇÃO CARAÚBAS — TURNO DIÁRIO</div></div>
-  <div><div class="clk" id="clk"></div><div class="clkd" id="clkd"></div></div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button class="btn bgh btn-lock" onclick="abrirModalGestor()" style="padding:5px 13px;font-size:11px;" title="Compartilhar modo leitura com gestor">
+      👁 Modo Gestor
+    </button>
+    <button class="btn bgr" onclick="sairModoLeitura()" id="btn-sair-ro" style="display:none;padding:5px 13px;font-size:11px;">
+      ✕ Sair Leitura
+    </button>
+    <div><div class="clk" id="clk"></div><div class="clkd" id="clkd"></div></div>
+  </div>
+</div>
+
+<!-- BANNER MODO LEITURA -->
+<div class="ro-banner">👁 MODO SOMENTE LEITURA — Visualização para Gestor &nbsp;·&nbsp; Nenhuma alteração pode ser feita</div>
+
+<!-- MODAL: escolha de acesso -->
+<div class="mo" id="mo-gestor" style="display:none;">
+  <div class="mo-box">
+    <div class="mo-title">👁 Modo Gestor</div>
+    <div class="mo-sub">Ative o modo somente leitura para compartilhar o painel com seu gestor. Ele poderá visualizar todas as abas mas não poderá alterar nenhum dado.</div>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px;">
+      <button class="btn bgd" onclick="ativarLeitura()" style="justify-content:center;font-size:14px;">👁 Ativar Modo Leitura Agora</button>
+      <button class="btn bgh" onclick="copiarLinkLeitura()" style="justify-content:center;font-size:13px;">🔗 Copiar Link Direto (modo gestor)</button>
+    </div>
+    <div class="mo-sub" style="margin-bottom:0;">O link copiado abre o painel já em modo leitura, sem precisar de senha.</div>
+    <div class="mo-btns" style="margin-top:16px;">
+      <button class="btn bgh" onclick="fecharModal('mo-gestor')" style="flex:1;justify-content:center;">Fechar</button>
+    </div>
+  </div>
 </div>
 
 <!-- DRIVE BAR -->
@@ -208,8 +251,7 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
   <div class="prog-pct" id="ppct">0%</div>
 </div>
 <div class="tabs">
-  <div class="tab active" onclick="goTab('terminais')">📡 Terminais</div>
-  <div class="tab" onclick="goTab('britagem')">⚙️ Britagem</div>
+  <div class="tab active" onclick="goTab('britagem')">⚙️ Britagem</div>
   <div class="tab" onclick="goTab('mensagem')">💬 Mensagem</div>
   <div class="tab" onclick="goTab('diesel')">⛽ Diesel</div>
   <div class="tab" onclick="goTab('primario')">📈 Primário</div>
@@ -217,26 +259,11 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
   <div class="tab" onclick="goTab('anual')">📅 Prod. Anual</div>
 </div>
 
-<!-- ══ TAB 1: TERMINAIS ══ -->
-<div class="page active" id="tab-terminais">
-  <div class="card" id="c1">
-    <div class="chd"><div class="ct"><span class="step">01</span> Verificação de Terminais</div><div class="dot" id="d1"></div></div>
-    <div class="cb">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
-        <span style="font-size:11px;color:var(--mu);">18 terminais ativos — 00014 desconsiderado (desativado)</span>
-        <span id="tsum" style="font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:1px;"></span>
-      </div>
-      <div style="overflow-x:auto;max-height:360px;overflow-y:auto;">
-        <table class="gtbl"><thead><tr><th>Nº</th><th>Filial</th><th>Tipo</th><th>Última Comunicação (editável)</th><th>Status</th></tr></thead><tbody id="tbdy"></tbody></table>
-      </div>
-      <div class="brow"><button class="btn bgd" onclick="checkTerm()">⟳ Atualizar</button><button class="btn bgr" onclick="markDone(1)">✓ Concluído</button></div>
-      <div class="bdone" id="b1">✓ Terminais verificados</div>
-    </div>
-  </div>
-</div>
+<!-- ══ TAB TERMINAIS (oculta) ══ -->
+<div class="page" id="tab-terminais" style="display:none!important;"></div>
 
 <!-- ══ TAB 2: BRITAGEM ══ -->
-<div class="page" id="tab-britagem">
+<div class="page active" id="tab-britagem">
   <div class="card" id="c2">
     <div class="chd"><div class="ct"><span class="step">02</span> Relatório de Britagem</div><div class="dot" id="d2"></div></div>
     <div class="cb">
@@ -532,12 +559,16 @@ function tick(){
 setInterval(tick,1000);tick();
 
 // ── TABS ──
-const TABS=['terminais','britagem','mensagem','diesel','primario','motoristas','anual'];
+const TABS=['britagem','mensagem','diesel','primario','motoristas','anual'];
 function goTab(id){
+  if(id==='terminais')return; // desabilitada
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+id).classList.add('active');
-  document.querySelectorAll('.tab')[TABS.indexOf(id)].classList.add('active');
+  const pageEl=document.getElementById('tab-'+id);
+  if(pageEl)pageEl.classList.add('active');
+  const idx=TABS.indexOf(id);
+  const tabEls=document.querySelectorAll('.tab');
+  if(idx>=0&&tabEls[idx])tabEls[idx].classList.add('active');
   if(id==='primario'||id==='motoristas')renderDash();
   if(id==='anual')renderAnual();
 }
@@ -1149,6 +1180,44 @@ function driveRestoreHint(){
       localStorage.getItem('cb_drive_last_sync')||'';
   }
 }
+
+// ── MODO LEITURA ──
+function abrirModalGestor(){ document.getElementById('mo-gestor').style.display='flex'; }
+function fecharModal(id){ document.getElementById(id).style.display='none'; }
+
+function ativarLeitura(){
+  document.body.classList.add('ro');
+  document.getElementById('btn-sair-ro').style.display='flex';
+  document.querySelector('.btn-lock').style.display='none';
+  fecharModal('mo-gestor');
+  toast('Modo leitura ativado!');
+}
+
+function sairModoLeitura(){
+  document.body.classList.remove('ro');
+  document.getElementById('btn-sair-ro').style.display='none';
+  document.querySelector('.btn-lock').style.display='flex';
+  toast('Modo leitura desativado.');
+}
+
+function copiarLinkLeitura(){
+  // Gera link com ?gestor=1 que abre automaticamente em modo leitura
+  const url=window.location.href.split('?')[0]+'?gestor=1';
+  navigator.clipboard.writeText(url).then(()=>{
+    toast('Link copiado! Envie para seu gestor.');
+    fecharModal('mo-gestor');
+  });
+}
+
+// Detecta se abriu com ?gestor=1 e ativa leitura automaticamente
+(function detectGestorMode(){
+  const p=new URLSearchParams(window.location.search);
+  if(p.get('gestor')==='1'){
+    // aguarda DOM carregar
+    document.addEventListener('DOMContentLoaded',()=>{ setTimeout(ativarLeitura, 300); });
+    if(document.readyState!=='loading') setTimeout(ativarLeitura, 300);
+  }
+})();
 
 // ── CONFIG AUTO-SAVE ──
 ['cfg-mes','cfg-meta','cfg-metav','cfg-ideal','cfg-du'].forEach(id=>{
