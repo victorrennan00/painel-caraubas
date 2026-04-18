@@ -908,120 +908,217 @@ function toast(msg){const t=document.getElementById('toast');t.textContent='✓ 
 function toastErr(msg){const t=document.getElementById('toast');t.textContent='✗ '+msg;t.style.borderColor='var(--rd)';t.style.color='var(--rd)';t.classList.add('show');setTimeout(()=>{t.classList.remove('show');t.style.borderColor='var(--gr)';t.style.color='var(--gr)';},3500);}
 
 // ════════════════════════════════════════════════════════
-// GOOGLE DRIVE INTEGRATION
+// GOOGLE DRIVE INTEGRATION — sync dados + xlsx
 // ════════════════════════════════════════════════════════
 const GD = {
   CLIENT_ID: '283587329634-a1kqe367aq7fp737mlu5bhullis8nr8u.apps.googleusercontent.com',
   SCOPES:    'https://www.googleapis.com/auth/drive.file',
   FOLDER_ID: '1KoAO32LGnneR2exK0_w3dzqL6a7JH4E5',
-  FILE_NAME: 'Producao_Caraubas.xlsx',
+  JSON_NAME: 'caraubas_dados.json',   // backup de todos os dados
+  XLSX_NAME: 'Producao_Caraubas.xlsx',
   token:     null,
-  fileId:    null,
+  jsonId:    null,
+  xlsxId:    null,
   autoSync:  true,
 };
 
-// ── UI helpers ──
+// ── UI ──
 function driveUI(state){
-  // states: 'disconnected' | 'connecting' | 'connected' | 'syncing' | 'error'
   const dot=document.getElementById('drive-dot');
   const txt=document.getElementById('drive-status-txt');
   const btnLogin=document.getElementById('btn-drive-login');
   const btnSync=document.getElementById('btn-drive-sync');
   const btnOut=document.getElementById('btn-drive-logout');
   dot.className='drive-dot';
+  const show=(el,v)=>{if(el)el.style.display=v;};
   if(state==='disconnected'){
-    dot.classList.add(''); txt.style.color='var(--mu)';
-    txt.textContent='Google Drive — não conectado';
-    btnLogin.style.display='flex'; btnSync.style.display='none'; btnOut.style.display='none';
-  } else if(state==='connecting'){
-    dot.classList.add('sync'); txt.style.color='var(--gd)';
-    txt.textContent='Conectando ao Google Drive...';
-    btnLogin.style.display='none'; btnSync.style.display='none'; btnOut.style.display='none';
-  } else if(state==='connected'){
-    dot.classList.add('conn'); txt.style.color='var(--gr)';
-    txt.textContent='Google Drive — conectado ✓';
-    btnLogin.style.display='none'; btnSync.style.display='flex'; btnOut.style.display='flex';
-  } else if(state==='syncing'){
-    dot.classList.add('sync'); txt.style.color='var(--gd)';
-    txt.textContent='Sincronizando com o Drive...';
-    btnLogin.style.display='none'; btnSync.style.display='none'; btnOut.style.display='flex';
-  } else if(state==='error'){
-    dot.classList.add('err'); txt.style.color='var(--rd)';
-    txt.textContent='Erro na sincronização — clique para reconectar';
-    btnLogin.style.display='flex'; btnSync.style.display='none'; btnOut.style.display='flex';
+    txt.style.color='var(--mu)';txt.textContent='Google Drive — não conectado';
+    show(btnLogin,'flex');show(btnSync,'none');show(btnOut,'none');
+  }else if(state==='connecting'){
+    dot.classList.add('sync');txt.style.color='var(--gd)';txt.textContent='Conectando...';
+    show(btnLogin,'none');show(btnSync,'none');show(btnOut,'none');
+  }else if(state==='connected'){
+    dot.classList.add('conn');txt.style.color='var(--gr)';txt.textContent='Google Drive — conectado ✓';
+    show(btnLogin,'none');show(btnSync,'flex');show(btnOut,'flex');
+  }else if(state==='syncing'){
+    dot.classList.add('sync');txt.style.color='var(--gd)';txt.textContent='Sincronizando dados...';
+    show(btnLogin,'none');show(btnSync,'none');show(btnOut,'flex');
+  }else if(state==='loading'){
+    dot.classList.add('sync');txt.style.color='var(--bl)';txt.textContent='Carregando dados do Drive...';
+    show(btnLogin,'none');show(btnSync,'none');show(btnOut,'flex');
+  }else if(state==='error'){
+    dot.classList.add('err');txt.style.color='var(--rd)';txt.textContent='Erro — clique para reconectar';
+    show(btnLogin,'flex');show(btnSync,'none');show(btnOut,'flex');
   }
 }
-
-function driveSetLastSync(){
+function driveSetLastSync(label){
   const now=new Date().toLocaleString('pt-BR');
-  document.getElementById('drive-last-sync').textContent='Última sync: '+now;
-  localStorage.setItem('cb_drive_last_sync', now);
+  const msg=label?label+' · '+now:'Última sync: '+now;
+  document.getElementById('drive-last-sync').textContent=msg;
+  localStorage.setItem('cb_drive_last_sync',msg);
 }
 
 // ── Login ──
 function driveLogin(){
   if(typeof google==='undefined'||!google.accounts){
-    toastErr('Google Identity não carregou ainda. Aguarde e tente novamente.');
-    // tenta recarregar o script
-    const s=document.createElement('script');
-    s.src='https://accounts.google.com/gsi/client';
-    s.onload=()=>{window._gisLoaded=true;toast('Pronto! Clique em Conectar Drive novamente.');};
-    document.head.appendChild(s);
-    return;
+    toastErr('Google Identity não carregou. Aguarde e tente novamente.');
+    const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';
+    s.onload=()=>toast('Pronto! Clique em Conectar Drive novamente.');
+    document.head.appendChild(s);return;
   }
   driveUI('connecting');
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: GD.CLIENT_ID,
-    scope: GD.SCOPES,
-    callback: async (resp) => {
-      if(resp.error){ driveUI('error'); toastErr('Falha no login: '+resp.error); return; }
-      GD.token = resp.access_token;
+  google.accounts.oauth2.initTokenClient({
+    client_id:GD.CLIENT_ID, scope:GD.SCOPES,
+    callback:async(resp)=>{
+      if(resp.error){driveUI('error');toastErr('Falha no login: '+resp.error);return;}
+      GD.token=resp.access_token;
       localStorage.setItem('cb_drive_token_hint','true');
       driveUI('connected');
-      toast('Drive conectado! Buscando arquivo...');
-      await driveFindOrCreate();
+      await driveFindFiles();
+      // Ao conectar, carrega dados do Drive automaticamente
+      await driveLoadData();
     }
-  });
-  client.requestAccessToken();
+  }).requestAccessToken();
 }
-
 function driveLogout(){
-  if(GD.token) google.accounts.oauth2.revoke(GD.token);
-  GD.token=null; GD.fileId=null;
+  if(GD.token)google.accounts.oauth2.revoke(GD.token);
+  GD.token=null;GD.jsonId=null;GD.xlsxId=null;
   localStorage.removeItem('cb_drive_token_hint');
   driveUI('disconnected');
   document.getElementById('drive-file-info').textContent='';
   toast('Drive desconectado.');
 }
 
-// ── Busca ou cria o arquivo no Drive ──
-async function driveFindOrCreate(){
-  try {
-    // Busca pelo nome na pasta
-    const q=`name='${GD.FILE_NAME}' and '${GD.FOLDER_ID}' in parents and trashed=false`;
-    const res=await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)`,
-      {headers:{Authorization:'Bearer '+GD.token}}
-    );
-    const data=await res.json();
-    if(data.files && data.files.length>0){
-      GD.fileId=data.files[0].id;
-      const mod=new Date(data.files[0].modifiedTime).toLocaleString('pt-BR');
-      document.getElementById('drive-file-info').textContent=
-        `📄 ${GD.FILE_NAME}  ·  última modificação: ${mod}`;
-      toast('Arquivo encontrado no Drive!');
-    } else {
-      // Cria o arquivo vazio inicialmente
-      toast('Arquivo não encontrado — será criado ao sincronizar.');
-      document.getElementById('drive-file-info').textContent='📄 '+GD.FILE_NAME+' (será criado)';
-    }
+// ── Busca arquivos existentes no Drive ──
+async function driveFindFiles(){
+  try{
+    const search=async(name)=>{
+      const q=`name='${name}' and '${GD.FOLDER_ID}' in parents and trashed=false`;
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)`,
+        {headers:{Authorization:'Bearer '+GD.token}});
+      const d=await r.json();
+      return d.files&&d.files.length>0?d.files[0]:null;
+    };
+    const jf=await search(GD.JSON_NAME);
+    const xf=await search(GD.XLSX_NAME);
+    if(jf){GD.jsonId=jf.id;const mod=new Date(jf.modifiedTime).toLocaleString('pt-BR');document.getElementById('drive-file-info').textContent=`☁ Dados no Drive · última atualização: ${mod}`;}
+    else{document.getElementById('drive-file-info').textContent='☁ Dados serão criados ao sincronizar';}
+    if(xf)GD.xlsxId=xf.id;
     driveUI('connected');
-  } catch(e){
-    driveUI('error'); toastErr('Erro ao buscar arquivo no Drive.');
+  }catch(e){driveUI('error');toastErr('Erro ao buscar arquivos.');}
+}
+
+// ── CARREGAR dados do Drive (ao conectar em novo dispositivo) ──
+async function driveLoadData(){
+  if(!GD.token||!GD.jsonId)return;
+  driveUI('loading');
+  try{
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${GD.jsonId}?alt=media`,
+      {headers:{Authorization:'Bearer '+GD.token}});
+    if(!r.ok)throw new Error('Falha ao baixar: '+r.status);
+    const remote=await r.json();
+
+    // Mescla dados remotos com locais (remoto prevalece se mais recente)
+    let merged=false;
+    if(remote.dadosMes&&Object.keys(remote.dadosMes).length>0){dadosMes=remote.dadosMes;save();merged=true;}
+    if(remote.dieselCons&&Object.keys(remote.dieselCons).length>0){dieselCons=remote.dieselCons;saveDC();merged=true;}
+    if(remote.dieselEnt&&remote.dieselEnt.length>0){dieselEnt=remote.dieselEnt;saveDE();merged=true;}
+    if(remote.histMsgs&&remote.histMsgs.length>0){histMsgs=remote.histMsgs;saveHM();merged=true;}
+
+    // Re-renderiza tudo
+    renderHist();renderDC();renderDE();renderHM();calcEstoque();
+    driveUI('connected');
+    driveSetLastSync('✓ Dados carregados');
+    toast(merged?'Dados carregados do Drive! ✓':'Drive conectado — sem dados novos.');
+  }catch(e){
+    driveUI('connected'); // não bloqueia se falhar
+    toastErr('Não foi possível carregar dados do Drive.');
   }
 }
 
-// ── Gera XLSX em memória com SheetJS ──
+// ── SALVAR dados no Drive (JSON com todos os dados) ──
+async function driveSaveData(){
+  if(!GD.token)return;
+  const payload=JSON.stringify({dadosMes,dieselCons,dieselEnt,histMsgs,savedAt:new Date().toISOString()});
+  const blob=new Blob([payload],{type:'application/json'});
+  try{
+    if(GD.jsonId){
+      // Atualiza existente
+      const form=new FormData();
+      form.append('metadata',new Blob([JSON.stringify({name:GD.JSON_NAME})],{type:'application/json'}));
+      form.append('file',blob);
+      const r=await fetch(`https://www.googleapis.com/upload/drive/v3/files/${GD.jsonId}?uploadType=multipart`,
+        {method:'PATCH',headers:{Authorization:'Bearer '+GD.token},body:form});
+      if(!r.ok)throw new Error(r.status);
+    }else{
+      // Cria novo
+      const meta={name:GD.JSON_NAME,parents:[GD.FOLDER_ID]};
+      const form=new FormData();
+      form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+      form.append('file',blob);
+      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+        {method:'POST',headers:{Authorization:'Bearer '+GD.token},body:form});
+      if(!r.ok)throw new Error(r.status);
+      const d=await r.json();GD.jsonId=d.id;
+    }
+  }catch(e){throw e;}
+}
+
+// ── SALVAR XLSX no Drive ──
+async function driveSaveXLSX(){
+  if(!GD.token)return;
+  const xlsxData=buildXLSX();
+  const blob=new Blob([xlsxData],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  if(GD.xlsxId){
+    const form=new FormData();
+    form.append('metadata',new Blob([JSON.stringify({name:GD.XLSX_NAME})],{type:'application/json'}));
+    form.append('file',blob);
+    const r=await fetch(`https://www.googleapis.com/upload/drive/v3/files/${GD.xlsxId}?uploadType=multipart`,
+      {method:'PATCH',headers:{Authorization:'Bearer '+GD.token},body:form});
+    if(!r.ok)throw new Error(r.status);
+  }else{
+    const meta={name:GD.XLSX_NAME,parents:[GD.FOLDER_ID]};
+    const form=new FormData();
+    form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+    form.append('file',blob);
+    const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      {method:'POST',headers:{Authorization:'Bearer '+GD.token},body:form});
+    if(!r.ok)throw new Error(r.status);
+    const d=await r.json();GD.xlsxId=d.id;
+  }
+}
+
+// ── Sync completo (JSON + XLSX) ──
+async function driveSync(){
+  if(!GD.token){driveLogin();return;}
+  driveUI('syncing');
+  try{
+    await driveSaveData();
+    await driveSaveXLSX();
+    driveUI('connected');
+    driveSetLastSync('✓ Sincronizado');
+    const now=new Date().toLocaleString('pt-BR');
+    document.getElementById('drive-file-info').textContent=`☁ Dados sincronizados · ${now}`;
+    toast('Dados e Excel salvos no Drive! ✓');
+  }catch(e){
+    driveUI('error');toastErr('Erro ao sincronizar: '+e.message);
+  }
+}
+
+// ── Auto-sync após cada lançamento ──
+async function autoSync(){
+  if(!GD.token||!GD.autoSync)return;
+  try{await driveSaveData();await driveSaveXLSX();driveSetLastSync('✓ Auto-sync');}
+  catch(e){console.warn('autoSync falhou:',e);}
+}
+
+function driveRestoreHint(){
+  const last=localStorage.getItem('cb_drive_last_sync');
+  if(localStorage.getItem('cb_drive_token_hint')){
+    document.getElementById('drive-status-txt').textContent='Drive — reconecte para carregar seus dados';
+    if(last)document.getElementById('drive-last-sync').textContent=last;
+  }
+}
 function buildXLSX(){
   const wb = XLSX.utils.book_new();
 
@@ -1137,63 +1234,6 @@ function buildXLSX(){
   return XLSX.write(wb,{bookType:'xlsx',type:'array'});
 }
 
-// ── Sincronizar com Drive (upload/update) ──
-async function driveSync(){
-  if(!GD.token){ driveLogin(); return; }
-  driveUI('syncing');
-  try {
-    const xlsxData = buildXLSX();
-    const blob = new Blob([xlsxData],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-
-    if(GD.fileId){
-      // Update file existente
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify({name:GD.FILE_NAME})],{type:'application/json'}));
-      form.append('file', blob);
-      const res=await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${GD.fileId}?uploadType=multipart`,
-        {method:'PATCH', headers:{Authorization:'Bearer '+GD.token}, body:form}
-      );
-      if(!res.ok) throw new Error('Update falhou: '+res.status);
-    } else {
-      // Criar novo arquivo na pasta
-      const meta={name:GD.FILE_NAME, parents:[GD.FOLDER_ID]};
-      const form=new FormData();
-      form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
-      form.append('file',blob);
-      const res=await fetch(
-        'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name',
-        {method:'POST', headers:{Authorization:'Bearer '+GD.token}, body:form}
-      );
-      if(!res.ok) throw new Error('Upload falhou: '+res.status);
-      const data=await res.json();
-      GD.fileId=data.id;
-    }
-    driveUI('connected');
-    driveSetLastSync();
-    document.getElementById('drive-file-info').textContent=
-      `📄 ${GD.FILE_NAME}  ·  sincronizado em: ${new Date().toLocaleString('pt-BR')}`;
-    toast('Excel sincronizado no Google Drive! ✓');
-  } catch(e){
-    driveUI('error');
-    toastErr('Erro ao sincronizar: '+e.message);
-    console.error(e);
-  }
-}
-
-// ── Auto-sync: chamado após cada lançamento ──
-async function autoSync(){
-  if(!GD.token || !GD.autoSync) return;
-  await driveSync();
-}
-
-// ── Restaurar sessão anterior se existir hint ──
-function driveRestoreHint(){
-  if(localStorage.getItem('cb_drive_token_hint')){
-    document.getElementById('drive-status-txt').textContent='Google Drive — sessão anterior detectada';
-    document.getElementById('drive-last-sync').textContent=
-      localStorage.getItem('cb_drive_last_sync')||'';
-  }
 }
 
 // ── MODO LEITURA ──
