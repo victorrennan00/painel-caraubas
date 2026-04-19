@@ -174,7 +174,9 @@ body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono',monospace
 body.ro input:not([readonly]),body.ro textarea,body.ro select{pointer-events:none!important;opacity:.55;background:var(--s2)!important;cursor:default!important;}
 body.ro .addash,body.ro .rmbtn{display:none!important;}
 body.ro .btn-lock{display:none!important;}
-body.ro #btn-drive-login,body.ro #btn-drive-sync,body.ro #btn-drive-logout,body.ro .prog{display:none!important;}
+body.ro #btn-drive-sync,body.ro #btn-drive-logout,body.ro .prog{display:none!important;}
+body.ro #btn-drive-login{pointer-events:auto!important;opacity:1!important;}
+body.ro #btn-drive-reload{pointer-events:auto!important;opacity:1!important;}
 body.ro .ro-banner{display:block;}
 /* MODAL */
 .mo{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:600;display:flex;align-items:center;justify-content:center;}
@@ -206,7 +208,7 @@ body.ro .ro-banner{display:block;}
 </div>
 
 <!-- BANNER MODO LEITURA -->
-<div class="ro-banner">👁 MODO SOMENTE LEITURA — Visualização para Gestor &nbsp;·&nbsp; Nenhuma alteração pode ser feita</div>
+<div class="ro-banner">👁 MODO SOMENTE LEITURA &nbsp;·&nbsp; Visualização para Gestor &nbsp;·&nbsp; Conecte o Drive para ver os dados mais recentes</div>
 
 <!-- MODAL: escolha de acesso -->
 <div class="mo" id="mo-gestor" style="display:none;">
@@ -1330,10 +1332,50 @@ function copiarLinkLeitura(){
 (function detectGestorMode(){
   const p=new URLSearchParams(window.location.search);
   if(p.get('gestor')==='1'){
-    if(document.readyState!=='loading') setTimeout(()=>ativarLeitura(true), 300);
-    else document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>ativarLeitura(true),300));
+    const init=()=>{
+      setTimeout(()=>{
+        ativarLeitura(true);
+        // Conecta Drive automaticamente no modo gestor
+        setTimeout(driveLoginGestor, 800);
+      },300);
+    };
+    if(document.readyState!=='loading') init();
+    else document.addEventListener('DOMContentLoaded', init);
   }
 })();
+
+// Login silencioso para o modo gestor (sem popup de escolha de conta se já logado)
+function driveLoginGestor(){
+  // Mostra botão de conectar visível no modo gestor para ele poder logar
+  const bar = document.getElementById('btn-drive-login');
+  if(bar){
+    bar.style.display='flex';
+    bar.style.opacity='1';
+    bar.style.pointerEvents='auto';
+    bar.textContent='☁ Conectar para ver dados atualizados';
+    bar.style.fontSize='11px';
+  }
+  // Tenta login silencioso (sem interação) usando hint se já autorizou antes
+  if(typeof google==='undefined'||!google.accounts) return;
+  try{
+    const client=google.accounts.oauth2.initTokenClient({
+      client_id: GD.CLIENT_ID,
+      scope: GD.SCOPES,
+      prompt: '',           // sem prompt = tenta silencioso
+      callback: async(resp)=>{
+        if(resp.error) return; // silencioso — não mostra erro
+        GD.token=resp.access_token;
+        driveUI('connected');
+        if(bar) bar.style.display='none';
+        await driveFindFiles();
+        await driveLoadData(false);
+        // Inicia polling para atualizar automaticamente
+        startPoll();
+      }
+    });
+    client.requestAccessToken();
+  }catch(e){/* silencioso */}
+}
 
 // ── CONFIG AUTO-SAVE ──
 ['cfg-mes','cfg-meta','cfg-metav','cfg-ideal','cfg-du'].forEach(id=>{
