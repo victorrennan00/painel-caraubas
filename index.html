@@ -255,6 +255,9 @@ body.ro .ro-banner{display:block;}
     <button class="btn bgd" id="btn-drive-sync" onclick="driveSync()" style="padding:5px 12px;font-size:11px;display:none;">
       ↑ Sincronizar Agora
     </button>
+    <button class="btn bbl" id="btn-drive-reload" onclick="driveLoadData(true)" style="padding:5px 12px;font-size:11px;display:none;">
+      ↓ Recarregar Dados
+    </button>
     <button class="btn bgh" id="btn-drive-logout" onclick="driveLogout()" style="padding:5px 12px;font-size:11px;display:none;color:var(--rd);border-color:var(--rd);">
       Desconectar
     </button>
@@ -923,33 +926,65 @@ const GD = {
 };
 
 // ── UI ──
+let _pollInterval=null;
 function driveUI(state){
   const dot=document.getElementById('drive-dot');
   const txt=document.getElementById('drive-status-txt');
   const btnLogin=document.getElementById('btn-drive-login');
   const btnSync=document.getElementById('btn-drive-sync');
+  const btnReload=document.getElementById('btn-drive-reload');
   const btnOut=document.getElementById('btn-drive-logout');
   dot.className='drive-dot';
   const show=(el,v)=>{if(el)el.style.display=v;};
   if(state==='disconnected'){
     txt.style.color='var(--mu)';txt.textContent='Google Drive — não conectado';
-    show(btnLogin,'flex');show(btnSync,'none');show(btnOut,'none');
+    show(btnLogin,'flex');show(btnSync,'none');show(btnReload,'none');show(btnOut,'none');
+    stopPoll();
   }else if(state==='connecting'){
     dot.classList.add('sync');txt.style.color='var(--gd)';txt.textContent='Conectando...';
-    show(btnLogin,'none');show(btnSync,'none');show(btnOut,'none');
+    show(btnLogin,'none');show(btnSync,'none');show(btnReload,'none');show(btnOut,'none');
   }else if(state==='connected'){
     dot.classList.add('conn');txt.style.color='var(--gr)';txt.textContent='Google Drive — conectado ✓';
-    show(btnLogin,'none');show(btnSync,'flex');show(btnOut,'flex');
+    show(btnLogin,'none');show(btnSync,'flex');show(btnReload,'flex');show(btnOut,'flex');
+    startPoll();
   }else if(state==='syncing'){
-    dot.classList.add('sync');txt.style.color='var(--gd)';txt.textContent='Sincronizando dados...';
-    show(btnLogin,'none');show(btnSync,'none');show(btnOut,'flex');
+    dot.classList.add('sync');txt.style.color='var(--gd)';txt.textContent='Salvando dados...';
+    show(btnLogin,'none');show(btnSync,'none');show(btnReload,'none');show(btnOut,'flex');
   }else if(state==='loading'){
-    dot.classList.add('sync');txt.style.color='var(--bl)';txt.textContent='Carregando dados do Drive...';
-    show(btnLogin,'none');show(btnSync,'none');show(btnOut,'flex');
+    dot.classList.add('sync');txt.style.color='var(--bl)';txt.textContent='Carregando dados...';
+    show(btnLogin,'none');show(btnSync,'none');show(btnReload,'none');show(btnOut,'flex');
   }else if(state==='error'){
     dot.classList.add('err');txt.style.color='var(--rd)';txt.textContent='Erro — clique para reconectar';
-    show(btnLogin,'flex');show(btnSync,'none');show(btnOut,'flex');
+    show(btnLogin,'flex');show(btnSync,'none');show(btnReload,'none');show(btnOut,'flex');
+    stopPoll();
   }
+}
+
+// ── Auto-poll: verifica dados novos no Drive a cada 2 minutos ──
+function startPoll(){
+  stopPoll();
+  _pollInterval=setInterval(async()=>{
+    if(!GD.token||!GD.jsonId)return;
+    try{
+      // Verifica a data de modificação do arquivo JSON
+      const r=await fetch(
+        `https://www.googleapis.com/drive/v3/files/${GD.jsonId}?fields=modifiedTime`,
+        {headers:{Authorization:'Bearer '+GD.token}}
+      );
+      if(!r.ok)return;
+      const d=await r.json();
+      const remoteMod=new Date(d.modifiedTime).getTime();
+      const localMod=parseInt(localStorage.getItem('cb_drive_remote_mod')||'0');
+      if(remoteMod>localMod){
+        // Há dados novos — carrega silenciosamente
+        localStorage.setItem('cb_drive_remote_mod',remoteMod);
+        await driveLoadData(false); // false = silencioso
+      }
+    }catch(e){/* silencioso */}
+  }, 2*60*1000); // a cada 2 minutos
+}
+function stopPoll(){
+  if(_pollInterval){clearInterval(_pollInterval);_pollInterval=null;}
 }
 function driveSetLastSync(label){
   const now=new Date().toLocaleString('pt-BR');
@@ -984,6 +1019,8 @@ function driveLogout(){
   if(GD.token)google.accounts.oauth2.revoke(GD.token);
   GD.token=null;GD.jsonId=null;GD.xlsxId=null;
   localStorage.removeItem('cb_drive_token_hint');
+  localStorage.removeItem('cb_drive_remote_mod');
+  stopPoll();
   driveUI('disconnected');
   document.getElementById('drive-file-info').textContent='';
   toast('Drive desconectado.');
@@ -1009,14 +1046,17 @@ async function driveFindFiles(){
 }
 
 // ── CARREGAR dados do Drive (ao conectar em novo dispositivo) ──
-async function driveLoadData(){
+async function driveLoadData(showMsg=true){
   if(!GD.token||!GD.jsonId)return;
-  driveUI('loading');
+  if(showMsg) driveUI('loading');
   try{
     const r=await fetch(`https://www.googleapis.com/drive/v3/files/${GD.jsonId}?alt=media`,
       {headers:{Authorization:'Bearer '+GD.token}});
     if(!r.ok)throw new Error('Falha ao baixar: '+r.status);
     const remote=await r.json();
+
+    // Salva timestamp da última versão remota
+    if(remote.savedAt) localStorage.setItem('cb_drive_remote_mod', new Date(remote.savedAt).getTime());
 
     // Mescla dados remotos com locais (remoto prevalece se mais recente)
     let merged=false;
@@ -1028,11 +1068,13 @@ async function driveLoadData(){
     // Re-renderiza tudo
     renderHist();renderDC();renderDE();renderHM();calcEstoque();
     driveUI('connected');
-    driveSetLastSync('✓ Dados carregados');
-    toast(merged?'Dados carregados do Drive! ✓':'Drive conectado — sem dados novos.');
+    const now=new Date().toLocaleString('pt-BR');
+    driveSetLastSync(merged?'✓ Dados atualizados':'✓ Sem novidades');
+    document.getElementById('drive-file-info').textContent=`☁ Dados sincronizados · ${now}`;
+    if(showMsg) toast(merged?'Dados carregados do Drive! ✓':'Tudo atualizado — sem dados novos.');
   }catch(e){
-    driveUI('connected'); // não bloqueia se falhar
-    toastErr('Não foi possível carregar dados do Drive.');
+    driveUI('connected');
+    if(showMsg) toastErr('Não foi possível carregar dados do Drive.');
   }
 }
 
